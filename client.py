@@ -106,16 +106,17 @@ if __name__ == "__main__":
 	client_context.check_hostname = False
 	client_context.verify_mode = ssl.CERT_NONE
 
-	# Send our generated certificate chain
+	# Send our generated certificate chain during the handshake
 	client_context.load_cert_chain(output)
 
+	# Connect to the server
 	try:
 		sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 		conn = client_context.wrap_socket(sock, server_side=False)
 		conn.connect((args.ip, args.port))
 		print("[*] File sent")
 
-	# Handle any other possible exceptions
+	# Handle any possible exceptions
 	except Exception as e:
 		print("[!] {}".format(e))
 

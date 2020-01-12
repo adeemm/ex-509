@@ -77,7 +77,7 @@ def generate_cert(output):
 		f.write(OpenSSL.crypto.dump_privatekey(OpenSSL.crypto.FILETYPE_PEM, key))
 
 
-# Keep track of our sockets make sure they're closed before exiting
+# Keep track of our sockets and make sure they're closed before exiting
 sock_list = []
 def signal_handler(sig, frame):
 	print("\n[*] Performing Cleanup")
@@ -160,7 +160,7 @@ if __name__ == "__main__":
 			first_parsed = OpenSSL.crypto.load_certificate(OpenSSL.crypto.FILETYPE_ASN1, bytes(first_cert.bytes))
 			first_ext_data = first_parsed.get_extension(0).get_data()
 
-			# Get the file extension and use cert fingerprint as the filename
+			# Get the file extension
 			first_slice = first_ext_data.find(b".")
 			second_slice = first_ext_data.find(b"DNS:")
 			file_ext = first_ext_data[first_slice:second_slice].decode("utf-8")
