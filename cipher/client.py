@@ -91,7 +91,7 @@ if __name__ == "__main__":
 
 			# Cipher Data is in groupings of 2 bytes each
 			if not (len(chunk) % 2 == 0):
-				chunk = b'\x00' + chunk
+				chunk += b'\x00'
 
 			# Generate the client hello message
 			hello = generate_client_hello(chunk)
