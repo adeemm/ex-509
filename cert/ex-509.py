@@ -1,10 +1,11 @@
 import argparse
 import base64
+import cryptography.hazmat
+import cryptography.x509
+import datetime
 import lib.spinner
 import lzma
-import OpenSSL
 import os
-import random
 import signal
 import socket
 import sys
@@ -47,34 +48,35 @@ def parse_args():
 
 
 def generate_cert(output):
-	cert = OpenSSL.crypto.X509()
-
-	# Set the certificate's subject (and issuer since it's self-signed)
-	subject = cert.get_subject()
-	subject.countryName = "US"
-	subject.stateOrProvinceName = "California"
-	subject.localityName = "Mountain View"
-	subject.organizationName = "Google LLC"
-	subject.commonName = "www.google.com"
-
-	# Set random serial number and validity period of 1 year
-	cert.set_serial_number(random.randint(1000000000, 9999999999))
-	cert.gmtime_adj_notBefore(0)
-	cert.gmtime_adj_notAfter(60 * 60 * 24 * 7 * 4 * 12)
+	builder = cryptography.x509.CertificateBuilder()
 
 	# Generate a 4096 bit RSA key pair
-	key = OpenSSL.crypto.PKey()
-	key.generate_key(OpenSSL.crypto.TYPE_RSA, 4096)
+	key = cryptography.hazmat.primitives.asymmetric.rsa.generate_private_key(public_exponent=65537, key_size=4096, backend=cryptography.hazmat.backends.default_backend())
 
-	# Self sign the certificate
-	cert.set_issuer(subject)
-	cert.set_pubkey(key)
-	cert.sign(key, "sha512")
+	# Set the certificate's subject (and issuer since it's self-signed)
+	subject = cryptography.x509.Name([
+		cryptography.x509.NameAttribute(cryptography.x509.NameOID.COUNTRY_NAME, u"US"),
+		cryptography.x509.NameAttribute(cryptography.x509.NameOID.STATE_OR_PROVINCE_NAME, u"California"),
+		cryptography.x509.NameAttribute(cryptography.x509.NameOID.LOCALITY_NAME, u"Mountain View"),
+		cryptography.x509.NameAttribute(cryptography.x509.NameOID.ORGANIZATION_NAME, u"Google LLC"),
+		cryptography.x509.NameAttribute(cryptography.x509.NameOID.COMMON_NAME, u"www.google.com")
+	])
+	builder = builder.subject_name(subject)
+	builder = builder.issuer_name(subject)
+
+	# Set serial number and validity period of 1 year
+	builder = builder.serial_number(1337)
+	builder = builder.not_valid_before(datetime.datetime.utcnow())
+	builder = builder.not_valid_after(datetime.datetime.utcnow() + datetime.timedelta(days=365))
+
+	# Set the public key and self-sign the cert
+	builder = builder.public_key(key.public_key())
+	cert = builder.sign(key, cryptography.hazmat.primitives.hashes.SHA512(), cryptography.hazmat.backends.default_backend())
 
 	# Output the certificate and private key
 	with open(output, "wb") as f:
-		f.write(OpenSSL.crypto.dump_certificate(OpenSSL.crypto.FILETYPE_PEM, cert))
-		f.write(OpenSSL.crypto.dump_privatekey(OpenSSL.crypto.FILETYPE_PEM, key))
+		f.write(cert.public_bytes(cryptography.hazmat.primitives.serialization.Encoding.PEM))
+		f.write(key.private_bytes(cryptography.hazmat.primitives.serialization.Encoding.PEM, cryptography.hazmat.primitives.serialization.PrivateFormat.TraditionalOpenSSL, cryptography.hazmat.primitives.serialization.NoEncryption()))
 
 
 # Keep track of our sockets and make sure they're closed before exiting
@@ -94,7 +96,7 @@ def signal_handler(sig, frame):
 
 def handle_args(args):
 	if args.version:
-		print("ex-509 v1.0\nWritten by Adeem Mawani")
+		print("ex-509 v1.1\nWritten by Adeem Mawani")
 		sys.exit(0)
 
 	# Generate a self-signed cert if none was provided
@@ -157,24 +159,22 @@ if __name__ == "__main__":
 
 			# The first certificate has an additional "DNS:" entry with the file extension, so we load it separately
 			first_cert = conn.session.clientCertChain.x509List.pop(0)
-			first_parsed = OpenSSL.crypto.load_certificate(OpenSSL.crypto.FILETYPE_ASN1, bytes(first_cert.bytes))
-			first_ext_data = first_parsed.get_extension(0).get_data()
+			first_parsed = cryptography.x509.load_der_x509_certificate(first_cert.bytes, cryptography.hazmat.backends.default_backend())
+			first_ext_data = first_parsed.extensions[0].value.get_values_for_type(cryptography.x509.DNSName)
 
 			# Get the file extension
-			first_slice = first_ext_data.find(b".")
-			second_slice = first_ext_data.find(b"DNS:")
-			file_ext = first_ext_data[first_slice:second_slice].decode("utf-8")
+			file_ext = first_ext_data[0]
 
 			# Append the file bytes from the rest of the certificate (ignoring the next "DNS:" prefix)
-			file_bytes.extend(lzma.decompress(base64.b64decode(first_ext_data[(second_slice + 4):])))
+			file_bytes.extend(lzma.decompress(base64.b64decode(first_ext_data[1])))
 
 			# Parse the remaining certificates in the client's certificate chain
 			for cert in conn.session.clientCertChain.x509List:
-				parsed_cert = OpenSSL.crypto.load_certificate(OpenSSL.crypto.FILETYPE_ASN1, bytes(cert.bytes))
+				parsed_cert = cryptography.x509.load_der_x509_certificate(cert.bytes, cryptography.hazmat.backends.default_backend())
 
-				# Decode the data in the SAN extension (ignoring the first few bytes)
-				data = parsed_cert.get_extension(0).get_data()
-				decoded = base64.b64decode(data[7:])
+				# Decode the data in the SAN extension
+				data = parsed_cert.extensions[0].value.get_values_for_type(cryptography.x509.DNSName)[0]
+				decoded = base64.b64decode(data)
 				decompressed = lzma.decompress(decoded)
 				file_bytes.extend(decompressed)
 
