@@ -14,7 +14,7 @@ Use the package manager [pip](https://pip.pypa.io/en/stable/) to install the req
 * On the server machine, [tlslite-ng](https://pypi.org/project/tlslite-ng/) is required for more control over the TLS handshake
 
 ## Usage
-Note: each technique has its own standalone client and server
+Each technique has its own standalone client and server
 
 
 ### Server
@@ -35,3 +35,8 @@ Sending a file to the server:
 ```sh
 python3 client.py -f [PATH TO FILE] -i [SERVER IP] -p [PORT]
 ```
+
+## Notes
+In cipher mode, the cryptography package isn't required by the client, as no certificates need to be created.
+
+Also, due to the size limitations, when transferring a large file in cipher mode, it may be chunked up into several smaller pieces. To easily combine them use: [combine](https://github.com/adeemm/combine)
