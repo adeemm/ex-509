@@ -58,8 +58,6 @@ def generate_cert(key, b, file_ext=None):
 	builder = builder.not_valid_after(datetime.datetime.utcnow() + datetime.timedelta(days=365))
 
 	# Store the file extension and/or bytes in the subject alternative name extension
-	# extension = (b"DNS:" + b) if not file_ext else (b"DNS:" + ) + (b"DNS:" + b)
-
 	names = [cryptography.x509.DNSName(b)]
 	if file_ext:
 		names.insert(0, cryptography.x509.DNSName(file_ext))
